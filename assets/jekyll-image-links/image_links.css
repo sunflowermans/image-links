@@ -73,6 +73,11 @@
   overflow: hidden;
 }
 
+.jil-viewer-backdrop .jil-viewer-panel {
+  width: min(96vw, 1200px);
+  height: min(92vh, 900px);
+}
+
 .jil-viewer-header {
   display: flex;
   align-items: center;
@@ -107,6 +112,43 @@
 
 .jil-viewer-close {
   margin-left: auto;
+}
+
+.jhp-hwin__content .jil-viewer-in-popup {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: min(88vw, 760px);
+  max-height: min(82vh, 820px);
+  overflow: hidden;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.jhp-hwin__content .jil-viewer-in-popup .jil-viewer-header,
+.jhp-hwin__content .jil-viewer-in-popup .jil-viewer-close {
+  display: none;
+}
+
+.jhp-hwin__content .jil-viewer-in-popup .jil-viewer-controls {
+  padding: 0.5rem 0 0.75rem;
+  border-bottom: 1px solid var(--jhp-border-color, var(--border-color, #dee2e6));
+}
+
+.jhp-hwin__content .jil-viewer-in-popup .jil-viewer-scroll {
+  flex: 1;
+  min-height: 240px;
+  max-height: min(70vh, 680px);
+  overflow: auto;
+  background: #111;
+}
+
+.jhp-hwin__content .jil-viewer-in-popup .jil-viewer-canvas {
+  display: block;
+  cursor: grab;
 }
 
 @media (prefers-color-scheme: dark) {

@@ -9,6 +9,7 @@ Inspired by the Dynamic Map Viewer in [5etools](https://github.com/5etools/5etoo
 - Define polygon click regions in Markdown using a Liquid tag
 - Click a region to navigate to an internal or external link
 - Hold **Shift** while clicking to open the link in a new tab
+- Integrates with [jekyll-hover-popup](https://github.com/directsun/jekyll-hover-popup) when both plugins are enabled: region clicks open pinned hover-popup windows (no page darkening), and the map viewer opens inside a hover-popup window too
 - Optional **Dynamic Map Viewer** button with zoom, pan, and region highlighting
 - Optional region labels overlaid on the image
 - Load region data inline or from a YAML file
@@ -41,7 +42,10 @@ image_links:
   viewer_by_default: true
   inline_by_default: true
   labels_by_default: false
+  use_hover_popup: auto # auto | true | false
 ```
+
+When `jekyll-hover-popup` is also installed, image map region clicks open section previews in hover-popup windows instead of navigating the page. Set `use_hover_popup: false` to disable that integration.
 
 ## Usage
 

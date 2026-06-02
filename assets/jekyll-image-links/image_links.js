@@ -2,6 +2,20 @@
   "use strict";
 
   const ROOT_SELECTOR = '[data-jil-root="true"]';
+  const config = window.__JIL_CONFIG__ || {};
+
+  function getHoverPopup() {
+    const api = window.JekyllHoverPopup;
+    if (!api || typeof api.openLink !== "function" || typeof api.openContent !== "function") {
+      return null;
+    }
+    return api;
+  }
+
+  function useHoverPopup() {
+    if (config.useHoverPopup === false) return false;
+    return !!getHoverPopup();
+  }
 
   function init() {
     document.querySelectorAll("[data-jil-map]").forEach(initMapHost);
@@ -67,7 +81,7 @@
       if (!region) return;
 
       event.preventDefault();
-      navigateToRegion(region, event);
+      openRegion(region, event);
     });
 
     img.addEventListener("mousemove", (event) => {
@@ -100,23 +114,41 @@
   }
 
   function openViewer(mapData, event) {
-    const modal = buildViewerModal(mapData);
-    document.body.appendChild(modal.backdrop);
-    modal.focus();
-    modal.backdrop.addEventListener("click", (evt) => {
-      if (evt.target === modal.backdrop) modal.close();
-    });
-  }
+    const panel = buildViewerPanel(mapData);
+    const jhp = useHoverPopup() ? getHoverPopup() : null;
 
-  function buildViewerModal(mapData) {
+    if (jhp) {
+      jhp.openContent({
+        title: mapData.title || "Map viewer",
+        pageUrl: mapData.src,
+        content: panel.root,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        isPermanent: true,
+        maxWidth: "min(96vw, 1200px)",
+      });
+      return;
+    }
+
     const backdrop = document.createElement("div");
     backdrop.className = "jil-viewer-backdrop";
     backdrop.setAttribute("role", "dialog");
     backdrop.setAttribute("aria-modal", "true");
     backdrop.setAttribute("aria-label", mapData.title || "Map viewer");
+    backdrop.appendChild(panel.root);
+    document.body.appendChild(backdrop);
+    panel.focusClose();
+    backdrop.addEventListener("click", (evt) => {
+      if (evt.target === backdrop) backdrop.remove();
+    });
+    backdrop.addEventListener("keydown", (evt) => {
+      if (evt.key === "Escape") backdrop.remove();
+    });
+  }
 
-    const panel = document.createElement("div");
-    panel.className = "jil-viewer-panel";
+  function buildViewerPanel(mapData) {
+    const root = document.createElement("div");
+    root.className = "jil-viewer-panel jil-viewer-in-popup";
 
     const header = document.createElement("div");
     header.className = "jil-viewer-header";
@@ -129,6 +161,7 @@
     closeBtn.type = "button";
     closeBtn.className = "jil-viewer-close btn btn-outline";
     closeBtn.textContent = "Close";
+    closeBtn.hidden = true;
 
     header.append(title, closeBtn);
 
@@ -148,13 +181,11 @@
     canvas.className = "jil-viewer-canvas";
     scroll.appendChild(canvas);
 
-    panel.append(header, controls, scroll);
-    backdrop.appendChild(panel);
+    root.append(header, controls, scroll);
 
     const state = {
       zoom: 1,
       image: null,
-      mapData,
     };
 
     const paint = () => {
@@ -211,7 +242,8 @@
       const point = canvasPointFromEvent(canvas, state.zoom, event);
       const region = firstIntersectedRegion(mapData.regions, point);
       if (!region) return;
-      navigateToRegion(region, event);
+      event.preventDefault();
+      openRegion(region, event);
     });
 
     canvas.addEventListener("mousemove", (event) => {
@@ -259,16 +291,9 @@
     };
     image.src = mapData.src;
 
-    const close = () => backdrop.remove();
-    closeBtn.addEventListener("click", close);
-    backdrop.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") close();
-    });
-
     return {
-      backdrop,
-      focus: () => closeBtn.focus(),
-      close,
+      root,
+      focusClose: () => closeBtn.focus(),
     };
   }
 
@@ -280,11 +305,25 @@
     return button;
   }
 
-  function navigateToRegion(region, event) {
+  async function openRegion(region, event) {
     if (event.shiftKey) {
       window.open(region.href, "_blank", "noopener,noreferrer");
       return;
     }
+
+    const jhp = useHoverPopup() ? getHoverPopup() : null;
+    if (jhp) {
+      event.preventDefault();
+      await jhp.openLink({
+        href: region.href,
+        title: region.title || region.label || region.href,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        isPermanent: true,
+      });
+      return;
+    }
+
     window.location.href = region.href;
   }
 
@@ -340,11 +379,22 @@
     return Math.min(max, Math.max(min, value));
   }
 
-  if (document.querySelector(ROOT_SELECTOR)) {
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", init);
-    } else {
-      init();
+  function start() {
+    if (!document.querySelector(ROOT_SELECTOR)) return;
+
+    const run = () => init();
+
+    if (document.querySelector('[data-hover-popup-root="true"]') && !getHoverPopup()) {
+      window.setTimeout(run, 0);
+      return;
     }
+
+    run();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
   }
 })();
