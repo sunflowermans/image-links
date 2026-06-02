@@ -9,12 +9,13 @@ module Jekyll
           next unless doc.respond_to?(:output_ext) && doc.output_ext == ".html"
 
           html = doc.output.to_s
-          next unless html.include?('data-jil-image-map="true"')
+          next unless html.include?('data-jil-image-map="true"') || html.include?('data-jil-map="true"')
 
           assets_path = cfg["assets_path"] || "/assets/jekyll-image-links"
           assets_path = "/#{assets_path}" unless assets_path.start_with?("/")
 
           begin
+            html = MapRenderer.enhance_html(html, site: site, page: doc, cfg: cfg)
             doc.output = inject_assets(html, assets_path: assets_path, site: site, cfg: cfg)
           rescue StandardError => e
             Jekyll.logger.warn("jekyll-image-links:", "Failed to process #{doc.relative_path}: #{e.class}: #{e.message}")
@@ -34,6 +35,7 @@ module Jekyll
       end
 
       def self.inject_assets(html, assets_path:, site:, cfg:)
+        return html unless html.include?('data-jil-image-map="true"')
         return html if html.include?('data-jil-root="true"')
 
         jil_config = build_jil_config(site, cfg)
