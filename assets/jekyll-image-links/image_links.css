@@ -1,0 +1,117 @@
+.jil-figure {
+  margin: 1.25rem 0;
+}
+
+.jil-map-host {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.jil-map-host.jil-inline .jil-map-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.jil-caption {
+  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--jil-caption-color, inherit);
+}
+
+.jil-toolbar {
+  margin-top: 0.75rem;
+}
+
+.jil-viewer-button {
+  font: inherit;
+}
+
+.jil-label-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.jil-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.2rem;
+  background: rgba(255, 255, 255, 0.82);
+  color: #1f2937;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+  line-height: 1.2;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.jil-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.jil-viewer-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(96vw, 1200px);
+  height: min(92vh, 900px);
+  background: var(--body-background-color, #fff);
+  color: var(--body-text-color, #272727);
+  border: 1px solid var(--border-color, #dee2e6);
+  border-radius: 0.35rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.jil-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color, #dee2e6);
+}
+
+.jil-viewer-title {
+  font-weight: 700;
+}
+
+.jil-viewer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color, #dee2e6);
+}
+
+.jil-viewer-scroll {
+  flex: 1;
+  overflow: auto;
+  background: #111;
+}
+
+.jil-viewer-canvas {
+  display: block;
+  cursor: grab;
+}
+
+.jil-viewer-close {
+  margin-left: auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  .jil-label {
+    background: rgba(24, 24, 24, 0.88);
+    color: #f3f4f6;
+  }
+}
