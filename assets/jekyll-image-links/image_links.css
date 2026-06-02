@@ -114,12 +114,20 @@
   margin-left: auto;
 }
 
+.jhp-hwin__content:has(.jil-viewer-in-popup) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .jhp-hwin__content .jil-viewer-in-popup {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   width: 100%;
   min-width: min(88vw, 760px);
-  max-height: min(82vh, 820px);
+  min-height: 0;
+  max-height: none;
   overflow: hidden;
   background: transparent;
   color: inherit;
@@ -134,14 +142,15 @@
 }
 
 .jhp-hwin__content .jil-viewer-in-popup .jil-viewer-controls {
+  flex: 0 0 auto;
   padding: 0.5rem 0 0.75rem;
   border-bottom: 1px solid var(--jhp-border-color, var(--border-color, #dee2e6));
 }
 
 .jhp-hwin__content .jil-viewer-in-popup .jil-viewer-scroll {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 240px;
-  max-height: min(70vh, 680px);
+  max-height: none;
   overflow: auto;
   background: #111;
 }
