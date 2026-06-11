@@ -70,14 +70,14 @@ module Jekyll
             src: resolved_src,
             alt: alt,
             native_width: native_from_source ? nil : attrs["width"],
-            native_height: native_from_source ? nil : attrs["height"],
-            display_style: display_style
+            native_height: native_from_source ? nil : attrs["height"]
           )
+          style_attr = display_style.empty? ? "" : %( style="#{escape_attr(display_style)}")
 
           <<~HTML.strip
             <img
               class="jil-map-image"
-              #{img_markup}
+              #{img_markup}#{style_attr}
               loading="lazy"#{title_attr}#{regions_attr}#{viewer_attr}#{inline_attr}#{labels_attr}
             />#{regions_script}
           HTML
@@ -92,12 +92,14 @@ module Jekyll
             src: map_data["src"],
             alt: alt,
             native_width: nil,
-            native_height: nil,
-            display_style: display_style
+            native_height: nil
           )
+          host_class = "jil-map-host"
+          host_class += " jil-height-constrained" if display_style.to_s.match?(/(?:^|;|\s)max-height\s*:/i)
+          host_style_attr = display_style.to_s.strip.empty? ? "" : %( style="#{escape_attr(display_style)}")
 
           <<~HTML.strip
-            <div class="jil-figure" data-jil-image-map="true"><div class="jil-map-host" id="#{id}" data-jil-map="#{escape_attr(map_json)}" data-jil-viewer="#{viewer}" data-jil-inline="#{inline}" data-jil-labels="#{labels}"><img class="jil-map-image" #{img_attrs} loading="lazy" /></div>#{caption_html}</div>
+            <div class="jil-figure" data-jil-image-map="true"><div class="#{host_class}" id="#{id}" data-jil-map="#{escape_attr(map_json)}" data-jil-viewer="#{viewer}" data-jil-inline="#{inline}" data-jil-labels="#{labels}"#{host_style_attr.empty? ? "" : " #{host_style_attr}"}><img class="jil-map-image" #{img_attrs} loading="lazy" /></div>#{caption_html}</div>
           HTML
         end
 
@@ -273,7 +275,7 @@ module Jekyll
           value
         end
 
-        def render_img_attrs(src:, alt:, native_width:, native_height:, display_style:)
+        def render_img_attrs(src:, alt:, native_width:, native_height:)
           parts = [
             %(src="#{escape_attr(src)}"),
             %(alt="#{escape_attr(alt)}"),
@@ -283,10 +285,6 @@ module Jekyll
              native_width.to_s.match?(/\A\d+\z/) && native_height.to_s.match?(/\A\d+\z/)
             parts << %(width="#{escape_attr(native_width)}")
             parts << %(height="#{escape_attr(native_height)}")
-          end
-
-          unless display_style.to_s.strip.empty?
-            parts << %(style="#{escape_attr(display_style)}")
           end
 
           parts.join(" ")

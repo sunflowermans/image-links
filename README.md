@@ -121,7 +121,7 @@ Legacy form still works — numeric `width`/`height` on the tag or `<img>` defin
 
 You can also write image maps directly in Markdown using `{::nomarkdown}` blocks. Only an `<img>` tag is required — no `<figure>` wrapper. Put configuration on the image itself using `data-jil-*` attributes.
 
-Store the **native** image dimensions in the YAML file. Region `points` use that coordinate system. Use CSS on the `<img>` for **display** size (percentages, max width/height, and so on). Click detection scales from the displayed size back to native coordinates automatically — you do not need to rewrite region points when the image is resized.
+Store the **native** image dimensions in the YAML file. Region `points` use that coordinate system. Use CSS on the `<img>` for **display** size (percentages, max width/height, and so on). At build time those display styles are moved to the surrounding `.jil-map-host` wrapper so percentage sizes resolve against the page layout correctly.
 
 If the plugin is disabled or not installed, the image still renders normally and browsers ignore the extra `data-jil-*` attributes.
 

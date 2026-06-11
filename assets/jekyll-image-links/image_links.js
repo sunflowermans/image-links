@@ -45,8 +45,13 @@
 
     const update = () => {
       overlay.innerHTML = "";
-      const rect = img.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
+      const geom = getMapGeometry(img, mapData);
+      if (!geom || !geom.width || !geom.height) return;
+
+      overlay.style.left = `${geom.offsetX}px`;
+      overlay.style.top = `${geom.offsetY}px`;
+      overlay.style.width = `${geom.width}px`;
+      overlay.style.height = `${geom.height}px`;
 
       mapData.regions.forEach((region) => {
         const center = polygonCenter(region.points);
@@ -71,6 +76,11 @@
     if (img.complete) update();
     img.addEventListener("load", update);
     window.addEventListener("resize", update);
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(update);
+      observer.observe(host);
+      observer.observe(img);
+    }
   }
 
   function bindInlineClicks(host, mapData, img) {
@@ -329,9 +339,67 @@
 
   function imagePointFromEvent(img, mapData, event) {
     const rect = img.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * mapData.width;
-    const y = ((event.clientY - rect.top) / rect.height) * mapData.height;
-    return [Math.round(x), Math.round(y)];
+    const geom = getMapGeometry(img, mapData);
+    if (!geom || !geom.width || !geom.height) {
+      return [0, 0];
+    }
+
+    const relX = (event.clientX - rect.left - geom.offsetX) / geom.width;
+    const relY = (event.clientY - rect.top - geom.offsetY) / geom.height;
+    return [
+      Math.round(relX * mapData.width),
+      Math.round(relY * mapData.height),
+    ];
+  }
+
+  function getMapGeometry(img, mapData) {
+    const rect = img.getBoundingClientRect();
+    const mapW = mapData.width;
+    const mapH = mapData.height;
+    if (!rect.width || !rect.height || !mapW || !mapH) {
+      return null;
+    }
+
+    const objectFit = window.getComputedStyle(img).objectFit || "fill";
+    const mapAspect = mapW / mapH;
+
+    if (objectFit === "fill") {
+      return {
+        offsetX: 0,
+        offsetY: 0,
+        width: rect.width,
+        height: rect.height,
+      };
+    }
+
+    const boxAspect = rect.width / rect.height;
+    let width;
+    let height;
+
+    if (objectFit === "cover") {
+      if (boxAspect > mapAspect) {
+        height = rect.height;
+        width = height * mapAspect;
+      } else {
+        width = rect.width;
+        height = width / mapAspect;
+      }
+    } else {
+      if (boxAspect > mapAspect) {
+        height = rect.height;
+        width = height * mapAspect;
+      } else {
+        width = rect.width;
+        height = width / mapAspect;
+      }
+    }
+
+    return {
+      offsetX: (rect.width - width) / 2,
+      offsetY: (rect.height - height) / 2,
+      width,
+      height,
+    };
   }
 
   function canvasPointFromEvent(canvas, zoom, event) {
