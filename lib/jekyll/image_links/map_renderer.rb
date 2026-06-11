@@ -7,17 +7,33 @@ module Jekyll
   module ImageLinks
     class MapRenderer
       PORTABLE_FIGURE = /<figure\b[^>]*\bdata-jil-map="true"[^>]*>[\s\S]*?<\/figure>/i
+      PORTABLE_IMAGE = /<img\b[^>]*\bclass="[^"]*\bjil-map-image\b[^"]*"[^>]*\/?>(?:\s*<script\b[^>]*\bclass="jil-regions-data"[^>]*>[\s\S]*?<\/script>)?/i
       REGIONS_SCRIPT = /<script\b[^>]*\bclass="jil-regions-data"[^>]*>([\s\S]*?)<\/script>/i
 
       class << self
-        def enhance_html(html, site:, page:, cfg:)
-          return html unless html.include?('data-jil-map="true"')
+        def portable_markup?(html)
+          return true if html.include?('data-jil-map="true"')
 
-          html.gsub(PORTABLE_FIGURE) do |figure_html|
-            enhance_portable_figure(figure_html, site: site, page: page, cfg: cfg)
+          html.scan(PORTABLE_IMAGE).any? { |fragment| portable_image?(fragment) }
+        end
+
+        def enhance_html(html, site:, page:, cfg:)
+          return html unless portable_markup?(html)
+
+          html = html.gsub(PORTABLE_FIGURE) do |figure_html|
+            enhance_portable_markup(figure_html, site: site, page: page, cfg: cfg)
           rescue StandardError => e
             Jekyll.logger.warn("jekyll-image-links:", "Failed to enhance portable figure: #{e.message}")
             figure_html
+          end
+
+          html.gsub(PORTABLE_IMAGE) do |image_html|
+            next image_html unless portable_image?(image_html)
+
+            enhance_portable_markup(image_html, site: site, page: page, cfg: cfg)
+          rescue StandardError => e
+            Jekyll.logger.warn("jekyll-image-links:", "Failed to enhance portable image map: #{e.message}")
+            image_html
           end
         end
 
@@ -41,28 +57,18 @@ module Jekyll
 
           regions_script = ""
           if regions_body && !regions_body.strip.empty? && regions_file.to_s.strip.empty?
-            regions_script = %(\n  <script type="application/yaml" class="jil-regions-data">#{regions_body.strip}\n  </script>)
+            regions_script = %(\n<script type="application/yaml" class="jil-regions-data">#{regions_body.strip}\n</script>)
           end
 
-          caption_html = title ? %(\n  <figcaption class="jil-caption">#{escape_html(title)}</figcaption>) : ""
-
           <<~HTML.strip
-            <figure
-              class="jil-figure"
-              data-jil-map="true"
-              data-jil-src="#{escape_attr(src)}"
-              data-jil-width="#{escape_attr(width)}"
-              data-jil-height="#{escape_attr(height)}"#{title_attr}#{regions_attr}#{viewer_attr}#{inline_attr}#{labels_attr}
-            >
-              <img
-                class="jil-map-image"
-                src="#{escape_attr(resolved_src)}"
-                alt="#{escape_attr(alt)}"
-                width="#{escape_attr(width)}"
-                height="#{escape_attr(height)}"
-                loading="lazy"
-              />#{regions_script}#{caption_html}
-            </figure>
+            <img
+              class="jil-map-image"
+              src="#{escape_attr(resolved_src)}"
+              alt="#{escape_attr(alt)}"
+              width="#{escape_attr(width)}"
+              height="#{escape_attr(height)}"
+              loading="lazy"#{title_attr}#{regions_attr}#{viewer_attr}#{inline_attr}#{labels_attr}
+            />#{regions_script}
           HTML
         end
 
@@ -79,24 +85,37 @@ module Jekyll
 
         private
 
-        def enhance_portable_figure(figure_html, site:, page:, cfg:)
-          open_tag = figure_html[/\A<figure\b[^>]*>/i] || ""
-          attrs = parse_html_attrs(open_tag)
+        def enhance_portable_markup(markup_html, site:, page:, cfg:)
+          figure_tag = markup_html[/\A<figure\b[^>]*>/i]
+          img_tag = markup_html[/<img\b[^>]*>/i] || ""
+          container_tag = figure_tag || img_tag
+          container_attrs = parse_html_attrs(container_tag)
+          img_attrs = parse_html_attrs(img_tag)
 
           merged = {
-            "src" => attrs["data-jil-src"] || extract_img_attr(figure_html, "src"),
-            "width" => attrs["data-jil-width"],
-            "height" => attrs["data-jil-height"],
-            "title" => attrs["data-jil-title"],
-            "alt" => extract_img_attr(figure_html, "alt"),
-            "file" => attrs["data-jil-regions"],
-            "viewer" => attrs["data-jil-viewer"],
-            "inline" => attrs["data-jil-inline"],
-            "labels" => attrs["data-jil-labels"],
+            "src" => container_attrs["data-jil-src"] || img_attrs["src"],
+            "width" => container_attrs["data-jil-width"] || img_attrs["width"],
+            "height" => container_attrs["data-jil-height"] || img_attrs["height"],
+            "title" => container_attrs["data-jil-title"],
+            "alt" => img_attrs["alt"],
+            "file" => container_attrs["data-jil-regions"] || img_attrs["data-jil-regions"],
+            "viewer" => container_attrs["data-jil-viewer"] || img_attrs["data-jil-viewer"],
+            "inline" => container_attrs["data-jil-inline"] || img_attrs["data-jil-inline"],
+            "labels" => container_attrs["data-jil-labels"] || img_attrs["data-jil-labels"],
           }
 
-          regions_body = figure_html[REGIONS_SCRIPT, 1]
+          merged["title"] ||= img_attrs["data-jil-title"] || merged["alt"]
+
+          regions_body = markup_html[REGIONS_SCRIPT, 1]
           render_interactive_from_attrs(merged, site: site, page: page, cfg: cfg, regions_body: regions_body)
+        end
+
+        def portable_image?(fragment)
+          return false unless fragment.match?(/\bclass="[^"]*\bjil-map-image\b/i)
+
+          fragment.include?("data-jil-regions=") ||
+            fragment.include?('data-jil-map="true"') ||
+            fragment.match?(REGIONS_SCRIPT)
         end
 
         def render_interactive_from_attrs(attrs, site:, page:, cfg:, regions_body: nil, liquid_context: nil)
@@ -232,14 +251,6 @@ module Jekyll
           tag_open.scan(/([\w-]+)\s*=\s*"([^"]*)"/) { |key, value| attrs[key] = value }
           tag_open.scan(/([\w-]+)\s*=\s*'([^']*)'/) { |key, value| attrs[key] = value }
           attrs
-        end
-
-        def extract_img_attr(figure_html, name)
-          tag = figure_html[/<img\b[^>]*>/i]
-          return nil unless tag
-
-          match = tag.match(/#{name}\s*=\s*"([^"]*)"/i) || tag.match(/#{name}\s*=\s*'([^']*)'/i)
-          match && match[1]
         end
 
         def stringify_keys(value)

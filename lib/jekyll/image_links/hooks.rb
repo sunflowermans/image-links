@@ -9,7 +9,7 @@ module Jekyll
           next unless doc.respond_to?(:output_ext) && doc.output_ext == ".html"
 
           html = doc.output.to_s
-          next unless html.include?('data-jil-image-map="true"') || html.include?('data-jil-map="true"')
+          next unless html.include?('data-jil-image-map="true"') || MapRenderer.portable_markup?(html)
 
           assets_path = cfg["assets_path"] || "/assets/jekyll-image-links"
           assets_path = "/#{assets_path}" unless assets_path.start_with?("/")

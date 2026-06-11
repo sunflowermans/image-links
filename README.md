@@ -105,6 +105,41 @@ regions:
 | `inline="false"` | Disable direct click regions on the inline image |
 | `labels="true"` | Show region labels on the inline image |
 
+### Manual HTML (portable markup)
+
+You can also write image maps directly in Markdown using `{::nomarkdown}` blocks. Only an `<img>` tag is required — no `<figure>` wrapper. Put configuration on the image itself using `data-jil-*` attributes; use normal `src`, `width`, `height`, and `alt` for the image.
+
+If the plugin is disabled or not installed, the image still renders normally and browsers ignore the extra `data-jil-*` attributes.
+
+```markdown
+{::nomarkdown}
+<img
+  class="jil-map-image"
+  src="/assets/images/a-familiar-tower/tower-1-combined-cropped.png"
+  alt="Level 1"
+  width="1413"
+  height="1455"
+  loading="lazy"
+  data-jil-title="Level 1"
+  data-jil-regions="assets/maps/a-familiar-tower-1.yml"
+  data-jil-viewer="true"
+  data-jil-inline="true"
+  data-jil-labels="true"
+/>
+{:/nomarkdown}
+```
+
+Portable images are detected by `class="jil-map-image"` together with region data (`data-jil-regions`, an adjacent `<script class="jil-regions-data">` block, or legacy `data-jil-map="true"`). Legacy `<figure data-jil-map="true">` markup is still supported.
+
+| Attribute | Description |
+|-----------|-------------|
+| `class="jil-map-image"` | Marks the image for enhancement (required) |
+| `data-jil-regions` | Path to a YAML regions file relative to site source |
+| `data-jil-title` | Caption and viewer title |
+| `data-jil-viewer` | Enable/disable the Dynamic Map Viewer button |
+| `data-jil-inline` | Enable/disable direct click regions on the inline image |
+| `data-jil-labels` | Show region labels on the inline image |
+
 ## Coordinate system
 
 Region `points` use the image's native pixel coordinates, matching the 5etools `mapRegions` format. For example, a 4937×3439 map uses coordinates in that range. The plugin scales clicks automatically when the image is displayed smaller on the page.
