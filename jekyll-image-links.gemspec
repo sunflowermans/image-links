@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.email = []
 
   spec.summary = "Jekyll plugin for clickable polygon regions on images, inspired by 5etools map viewer."
-  spec.homepage = "https://github.com/directsun/jekyll-image-links"
+  spec.homepage = "https://github.com/sunflowermans/image-links"
   spec.license = "MIT"
 
   spec.required_ruby_version = ">= 3.0"
