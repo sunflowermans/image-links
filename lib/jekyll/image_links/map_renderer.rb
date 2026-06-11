@@ -39,8 +39,6 @@ module Jekyll
 
         def render_portable_figure(attrs, site:, page: nil, liquid_context: nil, cfg: {}, regions_body: nil)
           src = attrs["src"].to_s
-          width = attrs["width"].to_s
-          height = attrs["height"].to_s
           title = attrs["title"]
           alt = attrs["alt"] || title
           regions_file = attrs["file"]
@@ -49,6 +47,14 @@ module Jekyll
           labels = attrs["labels"]
 
           resolved_src = resolve_url(src, site: site, page: page, liquid_context: liquid_context)
+          map_source = load_map_source(
+            site: site,
+            regions_file: regions_file,
+            regions_body: regions_body
+          )
+          native_from_source = native_dimensions_present?(map_source)
+          display_style = build_display_style(attrs, native_from_source: native_from_source)
+
           regions_attr = regions_file ? %( data-jil-regions="#{escape_attr(regions_file)}") : ""
           viewer_attr = %( data-jil-viewer="#{viewer}") unless viewer.nil? || viewer.empty?
           inline_attr = %( data-jil-inline="#{inline}") unless inline.nil? || inline.empty?
@@ -60,26 +66,38 @@ module Jekyll
             regions_script = %(\n<script type="application/yaml" class="jil-regions-data">#{regions_body.strip}\n</script>)
           end
 
+          img_markup = render_img_attrs(
+            src: resolved_src,
+            alt: alt,
+            native_width: native_from_source ? nil : attrs["width"],
+            native_height: native_from_source ? nil : attrs["height"],
+            display_style: display_style
+          )
+
           <<~HTML.strip
             <img
               class="jil-map-image"
-              src="#{escape_attr(resolved_src)}"
-              alt="#{escape_attr(alt)}"
-              width="#{escape_attr(width)}"
-              height="#{escape_attr(height)}"
+              #{img_markup}
               loading="lazy"#{title_attr}#{regions_attr}#{viewer_attr}#{inline_attr}#{labels_attr}
             />#{regions_script}
           HTML
         end
 
-        def render_interactive(map_data, viewer:, inline:, labels:, alt:)
+        def render_interactive(map_data, viewer:, inline:, labels:, alt:, display_style: nil)
           map_json = JSON.generate(map_data)
           id = "jil-map-#{Digest::MD5.hexdigest(map_json)[0, 8]}"
           title = map_data["title"]
           caption_html = title ? %(<div class="jil-caption">#{escape_html(title)}</div>) : ""
+          img_attrs = render_img_attrs(
+            src: map_data["src"],
+            alt: alt,
+            native_width: nil,
+            native_height: nil,
+            display_style: display_style
+          )
 
           <<~HTML.strip
-            <div class="jil-figure" data-jil-image-map="true"><div class="jil-map-host" id="#{id}" data-jil-map="#{escape_attr(map_json)}" data-jil-viewer="#{viewer}" data-jil-inline="#{inline}" data-jil-labels="#{labels}"><img class="jil-map-image" src="#{escape_attr(map_data["src"])}" alt="#{escape_attr(alt)}" width="#{map_data["width"]}" height="#{map_data["height"]}" loading="lazy" /></div>#{caption_html}</div>
+            <div class="jil-figure" data-jil-image-map="true"><div class="jil-map-host" id="#{id}" data-jil-map="#{escape_attr(map_json)}" data-jil-viewer="#{viewer}" data-jil-inline="#{inline}" data-jil-labels="#{labels}"><img class="jil-map-image" #{img_attrs} loading="lazy" /></div>#{caption_html}</div>
           HTML
         end
 
@@ -96,6 +114,9 @@ module Jekyll
             "src" => container_attrs["data-jil-src"] || img_attrs["src"],
             "width" => container_attrs["data-jil-width"] || img_attrs["width"],
             "height" => container_attrs["data-jil-height"] || img_attrs["height"],
+            "style" => img_attrs["style"],
+            "data-jil-max-width" => img_attrs["data-jil-max-width"],
+            "data-jil-max-height" => img_attrs["data-jil-max-height"],
             "title" => container_attrs["data-jil-title"],
             "alt" => img_attrs["alt"],
             "file" => container_attrs["data-jil-regions"] || img_attrs["data-jil-regions"],
@@ -120,21 +141,25 @@ module Jekyll
 
         def render_interactive_from_attrs(attrs, site:, page:, cfg:, regions_body: nil, liquid_context: nil)
           src = resolve_url(attrs["src"], site: site, page: page, liquid_context: liquid_context)
-          width = attrs["width"].to_i
-          height = attrs["height"].to_i
           title = attrs["title"]
           alt = attrs["alt"] || title
           viewer = parse_bool(attrs["viewer"], default: cfg.fetch("viewer_by_default", true))
           inline = parse_bool(attrs["inline"], default: cfg.fetch("inline_by_default", true))
           labels = parse_bool(attrs["labels"], default: cfg.fetch("labels_by_default", false))
 
-          regions = load_regions(
+          map_source = load_map_source(
             site: site,
             regions_file: attrs["file"],
             regions_body: regions_body
           )
+          regions = map_source["regions"]
           validate_regions!(regions)
+
+          width, height = resolve_native_dimensions(map_source, attrs)
           validate_dimensions!(width, height, src)
+
+          native_from_source = native_dimensions_present?(map_source)
+          display_style = build_display_style(attrs, native_from_source: native_from_source)
 
           map_data = {
             "src" => src,
@@ -144,34 +169,127 @@ module Jekyll
             "regions" => normalize_regions(regions, site: site, page: page, liquid_context: liquid_context),
           }
 
-          render_interactive(map_data, viewer: viewer, inline: inline, labels: labels, alt: alt)
+          render_interactive(
+            map_data,
+            viewer: viewer,
+            inline: inline,
+            labels: labels,
+            alt: alt,
+            display_style: display_style
+          )
         end
 
-        def load_regions(site:, regions_file:, regions_body:)
-          if regions_file && !regions_file.to_s.strip.empty?
-            path = regions_file.to_s
-            full_path = Jekyll.sanitized_path(site.source, path)
-            raise ArgumentError, "image_map file not found: #{path}" unless File.file?(full_path)
+        def load_map_source(site:, regions_file:, regions_body:)
+          data =
+            if regions_file && !regions_file.to_s.strip.empty?
+              path = regions_file.to_s
+              full_path = Jekyll.sanitized_path(site.source, path)
+              raise ArgumentError, "image_map file not found: #{path}" unless File.file?(full_path)
 
-            data = YAML.safe_load(File.read(full_path), permitted_classes: [Date, Time, Symbol], aliases: true)
-            extract_regions_array(data)
-          else
-            return [] if regions_body.to_s.strip.empty?
+              YAML.safe_load(File.read(full_path), permitted_classes: [Date, Time, Symbol], aliases: true)
+            elsif regions_body.to_s.strip.empty?
+              {}
+            else
+              YAML.safe_load(regions_body, permitted_classes: [Date, Time, Symbol], aliases: true)
+            end
 
-            parsed = YAML.safe_load(regions_body, permitted_classes: [Date, Time, Symbol], aliases: true)
-            extract_regions_array(parsed)
-          end
+          normalize_map_source(data)
         end
 
-        def extract_regions_array(data)
+        def normalize_map_source(data)
           case data
           when Hash
-            data["regions"] || data[:regions] || []
+            {
+              "regions" => data["regions"] || data[:regions] || [],
+              "width" => data["width"] || data[:width],
+              "height" => data["height"] || data[:height],
+            }
           when Array
-            data
+            { "regions" => data, "width" => nil, "height" => nil }
+          when nil
+            { "regions" => [], "width" => nil, "height" => nil }
           else
             raise ArgumentError, "image_map regions must be a YAML list or a mapping with regions:"
           end
+        end
+
+        def native_dimensions_present?(map_source)
+          map_source["width"].to_i.positive? && map_source["height"].to_i.positive?
+        end
+
+        def resolve_native_dimensions(map_source, attrs)
+          width = map_source["width"].to_i
+          height = map_source["height"].to_i
+
+          if width <= 0 && attrs["width"].to_s.match?(/\A\d+\z/)
+            width = attrs["width"].to_i
+          end
+          if height <= 0 && attrs["height"].to_s.match?(/\A\d+\z/)
+            height = attrs["height"].to_i
+          end
+
+          [width, height]
+        end
+
+        def build_display_style(attrs, native_from_source:)
+          rules = {}
+
+          merge_style_rules!(rules, attrs["style"]) if attrs["style"]
+
+          [
+            ["data-jil-max-width", "max-width"],
+            ["data-jil-max-height", "max-height"],
+          ].each do |attr, prop|
+            value = attrs[attr]
+            rules[prop] = value if value && !value.to_s.strip.empty?
+          end
+
+          %w[width height].each do |dim|
+            value = attrs[dim].to_s.strip
+            next if value.empty?
+            next if !native_from_source && value.match?(/\A\d+\z/)
+
+            rules[dim] = format_css_size(value)
+          end
+
+          rules.map { |prop, value| "#{prop}: #{value}" }.join("; ")
+        end
+
+        def merge_style_rules!(rules, style)
+          style.to_s.split(";").each do |declaration|
+            prop, value = declaration.split(":", 2).map(&:strip)
+            next if prop.nil? || prop.empty? || value.nil? || value.empty?
+
+            rules[prop] = value
+          end
+        end
+
+        def format_css_size(value)
+          value = value.to_s.strip
+          return value if value.match?(/\A[\d.]+%\z/) || value.match?(/\A[\d.]+px\z/i) || value == "auto"
+
+          return "#{value}px" if value.match?(/\A\d+\z/)
+
+          value
+        end
+
+        def render_img_attrs(src:, alt:, native_width:, native_height:, display_style:)
+          parts = [
+            %(src="#{escape_attr(src)}"),
+            %(alt="#{escape_attr(alt)}"),
+          ]
+
+          if native_width && native_height &&
+             native_width.to_s.match?(/\A\d+\z/) && native_height.to_s.match?(/\A\d+\z/)
+            parts << %(width="#{escape_attr(native_width)}")
+            parts << %(height="#{escape_attr(native_height)}")
+          end
+
+          unless display_style.to_s.strip.empty?
+            parts << %(style="#{escape_attr(display_style)}")
+          end
+
+          parts.join(" ")
         end
 
         def validate_regions!(regions)
@@ -185,7 +303,9 @@ module Jekyll
         end
 
         def validate_dimensions!(width, height, src)
-          raise ArgumentError, "image_map requires width and height attributes" unless width.positive? && height.positive?
+          unless width.positive? && height.positive?
+            raise ArgumentError, "image_map requires native width and height in the YAML file or numeric width/height attributes"
+          end
           raise ArgumentError, "image_map requires src attribute" if src.to_s.strip.empty?
         end
 
