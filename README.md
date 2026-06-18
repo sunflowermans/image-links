@@ -2,17 +2,20 @@
 
 A Jekyll plugin for [Just the Docs](https://github.com/just-the-docs/just-the-docs) sites that adds clickable polygon regions on images.
 
-Inspired by the Dynamic Map Viewer in [5etools](https://github.com/5etools/5etools-src), which uses custom JavaScript (not HTML `<map>` tags) to define polygon click areas on large map images.
+Inspired by the Dynamic Map Viewer in [5etools](https://github.com/5etools/5etools-src).
 
 ## Features
 
-- Define polygon click regions in Markdown using a Liquid tag
+- Define polygon click regions in Markdown using a Liquid tag inline or using an external YAML file
 - Click a region to navigate to an internal or external link
+- Automatic point rescaling for variable image dimensions (i.e. `width: 50%`)
 - Hold **Shift** while clicking to open the link in a new tab
-- Integrates with [jekyll-hover-popup](https://github.com/directsun/jekyll-hover-popup) when both plugins are enabled: region clicks open pinned hover-popup windows (no page darkening), and the map viewer opens inside a hover-popup window too
 - Optional **Dynamic Map Viewer** button with zoom, pan, and region highlighting
 - Optional region labels overlaid on the image
-- Load region data inline or from a YAML file
+- Integrates with [jekyll-hover-popup](https://github.com/directsun/jekyll-hover-popup) when both plugins are enabled: 
+  - Map viewer opens inside a hover-popup window
+  - Region clicks open pinned hover-popup windows
+
 
 ## Install
 
@@ -95,13 +98,6 @@ When `width` and `height` are in the YAML file, you can omit them from the tag a
 {% endimage_map %}
 ```
 
-Legacy form still works — numeric `width`/`height` on the tag or `<img>` define the native coordinate system when the YAML file does not include them:
-
-```liquid
-{% image_map src="/assets/maps/example.webp" width="1200" height="800" file="assets/maps/example-map.yml" %}
-{% endimage_map %}
-```
-
 ### Tag options
 
 | Attribute | Description |
@@ -119,7 +115,7 @@ Legacy form still works — numeric `width`/`height` on the tag or `<img>` defin
 
 ### Manual HTML (portable markup)
 
-You can also write image maps directly in Markdown using `{::nomarkdown}` blocks. Only an `<img>` tag is required — no `<figure>` wrapper. Put configuration on the image itself using `data-jil-*` attributes.
+You can also write image maps directly in Markdown using `{::nomarkdown}` blocks. Only an `<img>` tag is required. Put configuration on the image itself using `data-jil-*` attributes.
 
 Store the **native** image dimensions in the YAML file. Region `points` use that coordinate system. Use CSS on the `<img>` for **display** size (percentages, max width/height, and so on). At build time those display styles are moved to the surrounding `.jil-map-host` wrapper so percentage sizes resolve against the page layout correctly.
 
@@ -153,16 +149,7 @@ regions:
     points: [[120, 80], [420, 80], [420, 320], [120, 320]]
 ```
 
-Display sizing alternatives on the `<img>`:
-
-| Attribute | Example | Description |
-|-----------|---------|-------------|
-| `style` | `width:100%;max-width:900px;height:auto` | Full CSS control (recommended) |
-| `width` / `height` | `width="100%"` or `width="800"` | Display size when YAML provides native dimensions |
-| `data-jil-max-width` | `900px` or `80%` | Shorthand for `max-width` |
-| `data-jil-max-height` | `600px` | Shorthand for `max-height` |
-
-Portable images are detected by `class="jil-map-image"` together with region data (`data-jil-regions`, an adjacent `<script class="jil-regions-data">` block, or legacy `data-jil-map="true"`). Legacy `<figure data-jil-map="true">` markup is still supported.
+Qualified images are detected by `class="jil-map-image"` together with region data (`data-jil-regions`)
 
 | Attribute | Description |
 |-----------|-------------|
@@ -175,21 +162,10 @@ Portable images are detected by `class="jil-map-image"` together with region dat
 
 ## Coordinate system
 
-Region `points` use the image's native pixel coordinates, matching the 5etools `mapRegions` format. Define the native size once in the YAML file (`width` and `height`) or on the tag/image when not using YAML dimensions. For example, a 4937×3439 map uses coordinates in that range.
+Region `points` use the image's native pixel coordinates. Define the native size once in the YAML file (`width` and `height`) or on the tag/image when not using YAML dimensions. For example, a 4937×3439 map uses coordinates in that range.
 
 The plugin scales clicks from whatever size the image is displayed at back into that native coordinate system. Changing display size with CSS, percentages, or max width/height does not require editing region points.
 
-## How this relates to 5etools
-
-5etools stores regions as `mapRegions` on image entries in JSON data, then renders them with a custom `RenderMap` class (`js/render-map.js`) that:
-
-- draws the image on a `<canvas>`
-- overlays clickable polygons
-- uses a ray-casting algorithm for hit detection
-- opens linked adventure content in hover windows
-
-This plugin uses the same polygon coordinate model and the same hit-detection approach, adapted for Jekyll pages with normal `href` links instead of 5etools' internal book area IDs.
-
 ## License
 
-MIT
+[MIT](LICENSE)
