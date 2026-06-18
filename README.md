@@ -12,10 +12,11 @@ Inspired by the Dynamic Map Viewer in [5etools](https://github.com/5etools/5etoo
 - Hold **Shift** while clicking to open the link in a new tab
 - Optional **Dynamic Map Viewer** button with zoom, pan, and region highlighting
 - Optional region labels overlaid on the image
-- Integrates with [jekyll-hover-popup](https://github.com/directsun/jekyll-hover-popup) when both plugins are enabled: 
+- Integrates with [jekyll-hover-popup](https://github.com/sunflowermans/hover-popup) when both plugins are enabled: 
   - Map viewer opens inside a hover-popup window
   - Region clicks open pinned hover-popup windows
 
+https://github.com/user-attachments/assets/9b2f123b-56a4-43f4-984f-2dbfa7b844f9
 
 ## Install
 
