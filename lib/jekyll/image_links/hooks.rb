@@ -11,8 +11,7 @@ module Jekyll
           html = doc.output.to_s
           next unless html.include?('data-jil-image-map="true"') || MapRenderer.portable_markup?(html)
 
-          assets_path = cfg["assets_path"] || "/assets/jekyll-image-links"
-          assets_path = "/#{assets_path}" unless assets_path.start_with?("/")
+          assets_path = resolve_assets_path(site, cfg)
 
           begin
             html = MapRenderer.enhance_html(html, site: site, page: doc, cfg: cfg)
@@ -21,6 +20,21 @@ module Jekyll
             Jekyll.logger.warn("jekyll-image-links:", "Failed to process #{doc.relative_path}: #{e.class}: #{e.message}")
           end
         end
+      end
+
+      # Site-root path (e.g. "/assets/jekyll-image-links"), with site.baseurl prepended.
+      def self.resolve_assets_path(site, cfg)
+        assets_path = cfg["assets_path"] || "/assets/jekyll-image-links"
+        assets_path = "/#{assets_path}" unless assets_path.start_with?("/")
+
+        baseurl = site.config["baseurl"].to_s
+        baseurl = "" if baseurl == "/"
+        baseurl = baseurl.chomp("/")
+
+        return assets_path if baseurl.empty?
+        return assets_path if assets_path == baseurl || assets_path.start_with?("#{baseurl}/")
+
+        "#{baseurl}#{assets_path}"
       end
 
       def self.build_jil_config(site, cfg)
