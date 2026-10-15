@@ -248,7 +248,21 @@
     });
     zoomFit.addEventListener("click", fitZoom);
 
+    let dragStart = null;
+    let didPan = false;
+
+    const cursorForPoint = (event) => {
+      const point = canvasPointFromEvent(canvas, state.zoom, event);
+      const region = firstIntersectedRegion(mapData.regions, point);
+      return region ? "pointer" : "grab";
+    };
+
     canvas.addEventListener("click", (event) => {
+      if (didPan) {
+        didPan = false;
+        event.preventDefault();
+        return;
+      }
       const point = canvasPointFromEvent(canvas, state.zoom, event);
       const region = firstIntersectedRegion(mapData.regions, point);
       if (!region) return;
@@ -257,15 +271,21 @@
     });
 
     canvas.addEventListener("mousemove", (event) => {
-      const point = canvasPointFromEvent(canvas, state.zoom, event);
-      const region = firstIntersectedRegion(mapData.regions, point);
-      canvas.style.cursor = region ? "pointer" : "grab";
+      if (dragStart) return;
+      canvas.style.cursor = cursorForPoint(event);
     });
 
-    let dragStart = null;
     canvas.addEventListener("mousedown", (event) => {
-      if (event.button !== 2) return;
+      // Left-drag empty areas to pan; right-drag pans from anywhere.
+      if (event.button === 0) {
+        const point = canvasPointFromEvent(canvas, state.zoom, event);
+        if (firstIntersectedRegion(mapData.regions, point)) return;
+      } else if (event.button !== 2) {
+        return;
+      }
+
       event.preventDefault();
+      didPan = false;
       dragStart = {
         x: event.clientX,
         y: event.clientY,
@@ -275,15 +295,25 @@
       canvas.style.cursor = "grabbing";
     });
 
-    window.addEventListener("mouseup", () => {
+    window.addEventListener("mouseup", (event) => {
+      if (!dragStart) return;
       dragStart = null;
-      canvas.style.cursor = "grab";
+      canvas.style.cursor = cursorForPoint(event);
+      // Clear after the trailing click so a pan doesn't open a region.
+      if (didPan) {
+        setTimeout(() => {
+          didPan = false;
+        }, 0);
+      }
     });
 
     window.addEventListener("mousemove", (event) => {
       if (!dragStart) return;
-      scroll.scrollLeft = dragStart.scrollLeft + (dragStart.x - event.clientX);
-      scroll.scrollTop = dragStart.scrollTop + (dragStart.y - event.clientY);
+      const dx = dragStart.x - event.clientX;
+      const dy = dragStart.y - event.clientY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didPan = true;
+      scroll.scrollLeft = dragStart.scrollLeft + dx;
+      scroll.scrollTop = dragStart.scrollTop + dy;
     });
 
     canvas.addEventListener("contextmenu", (event) => event.preventDefault());
