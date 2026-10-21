@@ -17,41 +17,139 @@
     return !!getHoverPopup();
   }
 
+  function logError(message, error) {
+    if (error) console.error(`[jil] ${message}`, error);
+    else console.error(`[jil] ${message}`);
+  }
+
+  function reportMapProblems(img, mapData) {
+    const src = mapData.src || img.getAttribute("src") || "image map";
+    const width = Number(mapData.width);
+    const height = Number(mapData.height);
+
+    if (!width || !height) {
+      logError(`${src}: map data is missing width or height`);
+    }
+
+    const regions = mapData.regions;
+    if (!Array.isArray(regions) || regions.length === 0) {
+      logError(`${src}: map data has no regions`);
+    }
+
+    const checkSize = () => {
+      const naturalWidth = img.naturalWidth;
+      const naturalHeight = img.naturalHeight;
+      if (!naturalWidth || !naturalHeight) {
+        logError(`${src}: image failed to load`);
+        return;
+      }
+      if (!width || !height) return;
+      if (naturalWidth === width && naturalHeight === height) return;
+      logError(`${src}: image is ${naturalWidth}×${naturalHeight} but map data is ${width}×${height}`);
+    };
+
+    img.addEventListener("error", () => {
+      logError(`${src}: image failed to load`);
+    });
+
+    if (img.complete) checkSize();
+    else img.addEventListener("load", checkSize);
+
+    (regions || []).forEach((region, index) => {
+      const name = region.title || region.href || `region ${index + 1}`;
+      const points = region.points;
+      if (!region.href) logError(`${src}: "${name}" is missing href`);
+      if (!Array.isArray(points) || points.length < 3) {
+        logError(`${src}: "${name}" needs at least 3 points`);
+        return;
+      }
+      if (!width || !height) return;
+
+      const xs = points.map((point) => point[0]);
+      const ys = points.map((point) => point[1]);
+      const outside = xs.some((x) => x < 0 || x > width) || ys.some((y) => y < 0 || y > height);
+      if (!outside) return;
+      logError(
+        `${src}: "${name}" is outside ${width}×${height} (x ${Math.min(...xs)}–${Math.max(...xs)}, y ${Math.min(...ys)}–${Math.max(...ys)})`
+      );
+    });
+  }
+
   function init() {
-    document.querySelectorAll("[data-jil-map]").forEach(initMapHost);
+    document.querySelectorAll("img.jil-map-image[data-jil-regions]").forEach((img) => {
+      if (img.closest("[data-jil-map]")) return;
+      logError(
+        `${img.getAttribute("src") || "image"} was not enhanced (${img.getAttribute("data-jil-regions")})`
+      );
+    });
+
+    document.querySelectorAll("[data-jil-map]").forEach((host) => {
+      try {
+        initMapHost(host);
+      } catch (error) {
+        logError(`Failed to init ${host.id || "image map"}`, error);
+      }
+    });
   }
 
   function initMapHost(host) {
     if (host.dataset.jilReady === "true") return;
     host.dataset.jilReady = "true";
 
-    const mapData = JSON.parse(host.dataset.jilMap);
+    let mapData;
+    try {
+      mapData = JSON.parse(host.dataset.jilMap);
+    } catch (error) {
+      logError(`Invalid map JSON on ${host.id || "image map"}`, error);
+      return;
+    }
+
     const inline = host.dataset.jilInline !== "false";
     const viewer = host.dataset.jilViewer !== "false";
     const labels = host.dataset.jilLabels === "true";
     const img = host.querySelector(".jil-map-image");
 
-    if (!img) return;
+    if (!img) {
+      logError(`${mapData.src || host.id || "image map"}: missing .jil-map-image`);
+      return;
+    }
 
+    reportMapProblems(img, mapData);
     if (labels) renderLabels(host, mapData, img);
     if (inline) bindInlineClicks(host, mapData, img);
     if (viewer) addViewerButton(host, mapData);
+  }
+
+  function bindOverlayGeometry(overlay, host, mapData, img) {
+    const update = () => {
+      const geom = getMapGeometry(img, mapData);
+      if (!geom || !geom.width || !geom.height) return;
+      overlay.style.left = `${geom.offsetX}px`;
+      overlay.style.top = `${geom.offsetY}px`;
+      overlay.style.width = `${geom.width}px`;
+      overlay.style.height = `${geom.height}px`;
+    };
+
+    if (img.complete) update();
+    img.addEventListener("load", update);
+    window.addEventListener("resize", update);
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(update);
+      observer.observe(host);
+      observer.observe(img);
+    }
   }
 
   function renderLabels(host, mapData, img) {
     const overlay = document.createElement("div");
     overlay.className = "jil-label-layer";
     host.appendChild(overlay);
+    bindOverlayGeometry(overlay, host, mapData, img);
 
     const update = () => {
       overlay.innerHTML = "";
       const geom = getMapGeometry(img, mapData);
       if (!geom || !geom.width || !geom.height) return;
-
-      overlay.style.left = `${geom.offsetX}px`;
-      overlay.style.top = `${geom.offsetY}px`;
-      overlay.style.width = `${geom.width}px`;
-      overlay.style.height = `${geom.height}px`;
 
       mapData.regions.forEach((region) => {
         const center = polygonCenter(region.points);
@@ -329,6 +427,9 @@
       state.image = image;
       fitZoom();
     };
+    image.onerror = () => {
+      logError(`${mapData.src || "viewer image"}: viewer image failed to load`);
+    };
     image.src = mapData.src;
 
     return {
@@ -354,13 +455,22 @@
     const jhp = useHoverPopup() ? getHoverPopup() : null;
     if (jhp) {
       event.preventDefault();
-      await jhp.openLink({
-        href: region.href,
-        title: region.title || region.label || region.href,
-        clientX: event.clientX,
-        clientY: event.clientY,
-        isPermanent: true,
-      });
+      try {
+        await jhp.openLink({
+          href: region.href,
+          title: region.title || region.label || region.href,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          isPermanent: true,
+        });
+      } catch (error) {
+        logError(`Failed to open ${region.href}`, error);
+      }
+      return;
+    }
+
+    if (!region.href) {
+      logError("Region is missing href");
       return;
     }
 
@@ -478,7 +588,10 @@
   }
 
   function start() {
-    if (!document.querySelector(ROOT_SELECTOR)) return;
+    if (!document.querySelector(ROOT_SELECTOR)) {
+      logError("image_links.js loaded without data-jil-root");
+      return;
+    }
 
     const run = () => init();
 

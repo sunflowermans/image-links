@@ -23,7 +23,7 @@ module Jekyll
           html = html.gsub(PORTABLE_FIGURE) do |figure_html|
             enhance_portable_markup(figure_html, site: site, page: page, cfg: cfg)
           rescue StandardError => e
-            Jekyll.logger.warn("jekyll-image-links:", "Failed to enhance portable figure: #{e.message}")
+            log_error("#{page_label(page)} #{markup_context(figure_html)}: #{e.class}: #{e.message}")
             figure_html
           end
 
@@ -32,7 +32,7 @@ module Jekyll
 
             enhance_portable_markup(image_html, site: site, page: page, cfg: cfg)
           rescue StandardError => e
-            Jekyll.logger.warn("jekyll-image-links:", "Failed to enhance portable image map: #{e.message}")
+            log_error("#{page_label(page)} #{markup_context(image_html)}: #{e.class}: #{e.message}")
             image_html
           end
         end
@@ -170,6 +170,8 @@ module Jekyll
             "title" => title,
             "regions" => normalize_regions(regions, site: site, page: page, liquid_context: liquid_context),
           }
+          warn_if_regions_out_of_bounds!(map_data["regions"], width, height, src)
+          warn_if_image_dimensions_differ!(site, page, attrs["src"], width, height)
 
           render_interactive(
             map_data,
@@ -298,6 +300,170 @@ module Jekyll
             raise ArgumentError, "region #{index + 1} is missing href" if region["href"].to_s.strip.empty?
             raise ArgumentError, "region #{index + 1} is missing points" unless region["points"].is_a?(Array) && !region["points"].empty?
           end
+        end
+
+        def warn_if_regions_out_of_bounds!(regions, width, height, src)
+          regions.each do |region|
+            points = region["points"] || []
+            next if points.empty?
+
+            xs = points.map { |point| point[0] }
+            ys = points.map { |point| point[1] }
+            outside = xs.any? { |x| x.negative? || x > width } || ys.any? { |y| y.negative? || y > height }
+            next unless outside
+
+            name = region["title"] || region["href"]
+            log_error(
+              "#{src}: region \"#{name}\" is outside #{width}×#{height} (x #{xs.min}–#{xs.max}, y #{ys.min}–#{ys.max})"
+            )
+          end
+        end
+
+        def warn_if_image_dimensions_differ!(site, page, src, width, height)
+          path = local_image_path(site, page, src)
+          if path.nil?
+            log_error("#{src}: image file not found") unless remote_url?(src)
+            return
+          end
+
+          actual = read_image_size(path)
+          return unless actual
+
+          actual_width, actual_height = actual
+          return if actual_width == width && actual_height == height
+
+          log_error("#{src}: image file is #{actual_width}×#{actual_height} but map data is #{width}×#{height}")
+        end
+
+        def local_image_path(site, page, src)
+          return nil if src.to_s.strip.empty? || remote_url?(src)
+
+          path = src.to_s
+          baseurl = site.baseurl.to_s
+          baseurl = "" if baseurl == "/"
+          path = path.delete_prefix(baseurl) if !baseurl.empty? && (path == baseurl || path.start_with?("#{baseurl}/"))
+
+          candidates = [path]
+          if !path.start_with?("/") && page&.respond_to?(:relative_path) && page.relative_path
+            candidates << File.join(File.dirname(page.relative_path), path)
+          end
+
+          candidates.each do |candidate|
+            full_path = Jekyll.sanitized_path(site.source, candidate)
+            return full_path if File.file?(full_path)
+          end
+          nil
+        end
+
+        def remote_url?(src)
+          src.to_s.start_with?("http://", "https://", "data:")
+        end
+
+        def read_image_size(path)
+          File.open(path, "rb") do |file|
+            header = file.read(32)
+            return nil unless header && header.bytesize >= 24
+
+            header = header.b
+            if header.start_with?("\x89PNG\r\n\x1A\n".b)
+              return [header[16, 4].unpack1("N"), header[20, 4].unpack1("N")]
+            end
+            if header.start_with?("GIF87a".b, "GIF89a".b)
+              return header[6, 4].unpack("v2")
+            end
+            if header.start_with?("RIFF".b) && header[8, 4] == "WEBP".b
+              return read_webp_size(file, header)
+            end
+            return read_jpeg_size(file) if header.start_with?("\xFF\xD8".b)
+          end
+          nil
+        rescue StandardError => e
+          log_error("#{path}: could not read image dimensions: #{e.class}: #{e.message}")
+          nil
+        end
+
+        def read_webp_size(file, header)
+          format = header[12, 4]
+          if format == "VP8X".b
+            file.seek(24)
+            data = file.read(6)
+            return nil unless data&.bytesize == 6
+
+            bytes = data.bytes
+            width = 1 + (bytes[0] | (bytes[1] << 8) | (bytes[2] << 16))
+            height = 1 + (bytes[3] | (bytes[4] << 8) | (bytes[5] << 16))
+            [width, height]
+          elsif format == "VP8 ".b
+            file.seek(26)
+            data = file.read(4)
+            return nil unless data&.bytesize == 4
+
+            width = data[0, 2].unpack1("v") & 0x3fff
+            height = data[2, 2].unpack1("v") & 0x3fff
+            [width, height]
+          elsif format == "VP8L".b
+            file.seek(21)
+            data = file.read(4)
+            return nil unless data&.bytesize == 4
+
+            b0, b1, b2, b3 = data.bytes
+            width = 1 + (((b1 & 0x3F) << 8) | b0)
+            height = 1 + (((b3 & 0x0F) << 10) | (b2 << 2) | ((b1 & 0xC0) >> 6))
+            [width, height]
+          end
+        end
+
+        def read_jpeg_size(file)
+          file.seek(2)
+          loop do
+            byte = file.read(1)
+            return nil unless byte == "\xFF".b
+
+            marker = nil
+            loop do
+              byte = file.read(1)
+              return nil unless byte
+              next if byte == "\xFF".b
+
+              marker = byte.ord
+              break
+            end
+            next if marker == 0xD8 || marker == 0xD9
+            return nil if marker == 0xDA
+
+            length_bytes = file.read(2)
+            return nil unless length_bytes&.bytesize == 2
+
+            length = length_bytes.unpack1("n")
+            return nil if length < 2
+
+            if [0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF].include?(marker)
+              data = file.read(5)
+              return nil unless data&.bytesize == 5
+
+              _precision, height, width = data.unpack("Cnn")
+              return [width, height]
+            end
+
+            file.seek(length - 2, IO::SEEK_CUR)
+          end
+        end
+
+        def page_label(page)
+          return page.relative_path if page.respond_to?(:relative_path) && page.relative_path
+          return page.path if page.respond_to?(:path) && page.path
+
+          "page"
+        end
+
+        def markup_context(markup)
+          src = markup[/src="([^"]*)"/, 1]
+          regions = markup[/data-jil-regions="([^"]*)"/, 1]
+          [regions, src].compact.reject(&:empty?).join(" ")
+        end
+
+        def log_error(message)
+          Jekyll.logger.error("jekyll-image-links:", message)
         end
 
         def validate_dimensions!(width, height, src)

@@ -17,7 +17,10 @@ module Jekyll
             html = MapRenderer.enhance_html(html, site: site, page: doc, cfg: cfg)
             doc.output = inject_assets(html, assets_path: assets_path, site: site, cfg: cfg)
           rescue StandardError => e
-            Jekyll.logger.warn("jekyll-image-links:", "Failed to process #{doc.relative_path}: #{e.class}: #{e.message}")
+            Jekyll.logger.error(
+              "jekyll-image-links:",
+              "Failed to process #{doc.relative_path}: #{e.class}: #{e.message}"
+            )
           end
         end
       end

@@ -15,14 +15,22 @@ module Jekyll
         cfg = (site.config["image_links"] || {})
         regions_body = @attrs["file"] ? nil : super
 
-        figure = MapRenderer.render_portable_figure(
-          @attrs,
-          site: site,
-          page: context.registers[:page],
-          liquid_context: context,
-          cfg: cfg,
-          regions_body: regions_body
-        )
+        begin
+          figure = MapRenderer.render_portable_figure(
+            @attrs,
+            site: site,
+            page: context.registers[:page],
+            liquid_context: context,
+            cfg: cfg,
+            regions_body: regions_body
+          )
+        rescue StandardError => e
+          page = context.registers[:page]
+          page_label = page.respond_to?(:relative_path) ? page.relative_path : "page"
+          src = @attrs["src"] || @attrs["file"]
+          Jekyll.logger.error("jekyll-image-links:", "#{page_label} #{src}: #{e.class}: #{e.message}")
+          raise
+        end
 
         <<~HTML
           {::nomarkdown}
