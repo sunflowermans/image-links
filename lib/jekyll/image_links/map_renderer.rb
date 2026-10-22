@@ -45,6 +45,7 @@ module Jekyll
           viewer = attrs["viewer"]
           inline = attrs["inline"]
           labels = attrs["labels"]
+          preview = attrs["preview"]
 
           resolved_src = resolve_url(src, site: site, page: page, liquid_context: liquid_context)
           map_source = load_map_source(
@@ -59,6 +60,7 @@ module Jekyll
           viewer_attr = %( data-jil-viewer="#{viewer}") unless viewer.nil? || viewer.empty?
           inline_attr = %( data-jil-inline="#{inline}") unless inline.nil? || inline.empty?
           labels_attr = %( data-jil-labels="#{labels}") unless labels.nil? || labels.empty?
+          preview_attr = %( data-jil-preview="#{preview}") unless preview.nil? || preview.empty?
           title_attr = title ? %( data-jil-title="#{escape_attr(title)}") : ""
 
           regions_script = ""
@@ -78,12 +80,12 @@ module Jekyll
             <img
               class="jil-map-image"
               #{img_markup}#{style_attr}
-              loading="lazy"#{title_attr}#{regions_attr}#{viewer_attr}#{inline_attr}#{labels_attr}
+              loading="lazy"#{title_attr}#{regions_attr}#{viewer_attr}#{inline_attr}#{labels_attr}#{preview_attr}
             />#{regions_script}
           HTML
         end
 
-        def render_interactive(map_data, viewer:, inline:, labels:, alt:, display_style: nil)
+        def render_interactive(map_data, viewer:, inline:, labels:, preview:, alt:, display_style: nil)
           map_json = JSON.generate(map_data)
           id = "jil-map-#{Digest::MD5.hexdigest(map_json)[0, 8]}"
           title = map_data["title"]
@@ -99,7 +101,7 @@ module Jekyll
           host_style_attr = display_style.to_s.strip.empty? ? "" : %( style="#{escape_attr(display_style)}")
 
           <<~HTML.strip
-            <div class="jil-figure" data-jil-image-map="true"><div class="#{host_class}" id="#{id}" data-jil-map="#{escape_attr(map_json)}" data-jil-viewer="#{viewer}" data-jil-inline="#{inline}" data-jil-labels="#{labels}"#{host_style_attr.empty? ? "" : " #{host_style_attr}"}><img class="jil-map-image" #{img_attrs} loading="lazy" /></div>#{caption_html}</div>
+            <div class="jil-figure" data-jil-image-map="true"><div class="#{host_class}" id="#{id}" data-jil-map="#{escape_attr(map_json)}" data-jil-viewer="#{viewer}" data-jil-inline="#{inline}" data-jil-labels="#{labels}" data-jil-preview="#{preview}"#{host_style_attr.empty? ? "" : " #{host_style_attr}"}><img class="jil-map-image" #{img_attrs} loading="lazy" /></div>#{caption_html}</div>
           HTML
         end
 
@@ -125,6 +127,7 @@ module Jekyll
             "viewer" => container_attrs["data-jil-viewer"] || img_attrs["data-jil-viewer"],
             "inline" => container_attrs["data-jil-inline"] || img_attrs["data-jil-inline"],
             "labels" => container_attrs["data-jil-labels"] || img_attrs["data-jil-labels"],
+            "preview" => container_attrs["data-jil-preview"] || img_attrs["data-jil-preview"],
           }
 
           merged["title"] ||= img_attrs["data-jil-title"] || merged["alt"]
@@ -148,6 +151,7 @@ module Jekyll
           viewer = parse_bool(attrs["viewer"], default: cfg.fetch("viewer_by_default", true))
           inline = parse_bool(attrs["inline"], default: cfg.fetch("inline_by_default", true))
           labels = parse_bool(attrs["labels"], default: cfg.fetch("labels_by_default", false))
+          preview = parse_bool(attrs["preview"], default: cfg.fetch("preview_by_default", true))
 
           map_source = load_map_source(
             site: site,
@@ -178,6 +182,7 @@ module Jekyll
             viewer: viewer,
             inline: inline,
             labels: labels,
+            preview: preview,
             alt: alt,
             display_style: display_style
           )

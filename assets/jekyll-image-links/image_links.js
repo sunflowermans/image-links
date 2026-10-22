@@ -165,6 +165,8 @@
     const inline = host.dataset.jilInline !== "false";
     const viewer = host.dataset.jilViewer !== "false";
     const labels = host.dataset.jilLabels === "true";
+    // Absent means preview, so maps rendered before this flag still open one.
+    const preview = host.dataset.jilPreview !== "false";
     const img = host.querySelector(".jil-map-image");
 
     if (!img) {
@@ -174,8 +176,8 @@
 
     reportMapProblems(img, mapData);
     if (labels) renderLabels(host, mapData, img);
-    if (inline) bindInlineClicks(host, mapData, img);
-    if (viewer) addViewerButton(host, mapData);
+    if (inline) bindInlineClicks(host, mapData, img, preview);
+    if (viewer) addViewerButton(host, mapData, preview);
   }
 
   // Keep overlay geometry in sync with the image, including inside a preview
@@ -263,7 +265,7 @@
     });
   }
 
-  function bindInlineClicks(host, mapData, img) {
+  function bindInlineClicks(host, mapData, img, preview) {
     host.classList.add("jil-inline");
     img.addEventListener("click", (event) => {
       const point = imagePointFromEvent(img, mapData, event);
@@ -271,7 +273,7 @@
       if (!region) return;
 
       event.preventDefault();
-      openRegion(region, event);
+      openRegion(region, event, preview);
     });
 
     img.addEventListener("mousemove", (event) => {
@@ -281,7 +283,7 @@
     });
   }
 
-  function addViewerButton(host, mapData) {
+  function addViewerButton(host, mapData, preview) {
     const figure = host.closest(".jil-figure");
     if (!figure) return;
 
@@ -293,7 +295,7 @@
     button.type = "button";
     button.className = "jil-viewer-button btn btn-outline";
     button.textContent = mapData.title ? `Open ${mapData.title}` : "Open map viewer";
-    button.addEventListener("click", (event) => openViewer(mapData, event));
+    button.addEventListener("click", (event) => openViewer(mapData, event, preview));
     toolbar.appendChild(button);
 
     if (caption) {
@@ -303,8 +305,8 @@
     }
   }
 
-  function openViewer(mapData, event) {
-    const panel = buildViewerPanel(mapData);
+  function openViewer(mapData, event, preview) {
+    const panel = buildViewerPanel(mapData, preview);
     const jhp = useHoverPopup() ? getHoverPopup() : null;
 
     if (jhp) {
@@ -336,7 +338,7 @@
     });
   }
 
-  function buildViewerPanel(mapData) {
+  function buildViewerPanel(mapData, preview) {
     const root = document.createElement("div");
     root.className = "jil-viewer-panel jil-viewer-in-popup";
 
@@ -447,7 +449,7 @@
       const region = firstIntersectedRegion(mapData.regions, point);
       if (!region) return;
       event.preventDefault();
-      openRegion(region, event);
+      openRegion(region, event, preview);
     });
 
     canvas.addEventListener("mousemove", (event) => {
@@ -528,13 +530,13 @@
     return button;
   }
 
-  async function openRegion(region, event) {
+  async function openRegion(region, event, preview) {
     if (event.shiftKey) {
       window.open(region.href, "_blank", "noopener,noreferrer");
       return;
     }
 
-    const jhp = useHoverPopup() ? getHoverPopup() : null;
+    const jhp = preview !== false && useHoverPopup() ? getHoverPopup() : null;
     if (jhp) {
       event.preventDefault();
       try {
