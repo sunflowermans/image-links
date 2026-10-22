@@ -14,7 +14,7 @@ Inspired by the Dynamic Map Viewer in [5etools](https://github.com/5etools/5etoo
 - Optional region labels overlaid on the image
 - Integrates with [jekyll-hover-popup](https://github.com/sunflowermans/hover-popup) when both plugins are enabled: 
   - Map viewer opens inside a hover-popup window
-  - Region clicks open pinned hover-popup windows
+  - Region clicks open pinned hover-popup windows, unless the map sets `preview="false"`
 
 https://github.com/user-attachments/assets/9b2f123b-56a4-43f4-984f-2dbfa7b844f9
 
@@ -46,10 +46,11 @@ image_links:
   viewer_by_default: true
   inline_by_default: true
   labels_by_default: false
+  preview_by_default: true
   use_hover_popup: auto # auto | true | false
 ```
 
-When `jekyll-hover-popup` is also installed, image map region clicks open section previews in hover-popup windows instead of navigating the page. Set `use_hover_popup: false` to disable that integration.
+When `jekyll-hover-popup` is also installed, image map region clicks open section previews in hover-popup windows instead of navigating the page. Set `use_hover_popup: false` to disable that integration for the whole site. Set `preview_by_default: false`, or `preview="false"` on a single map, to keep the integration and still navigate the current page when a region is clicked.
 
 ## Usage
 
@@ -113,6 +114,7 @@ When `width` and `height` are in the YAML file, you can omit them from the tag a
 | `viewer="false"` | Disable the Dynamic Map Viewer button |
 | `inline="false"` | Disable direct click regions on the inline image |
 | `labels="true"` | Show region labels on the inline image |
+| `preview="false"` | Navigate the current page on region click instead of opening a preview window |
 
 ### Manual HTML (portable markup)
 
@@ -135,6 +137,7 @@ If the plugin is disabled or not installed, the image still renders normally and
   data-jil-viewer="true"
   data-jil-inline="true"
   data-jil-labels="true"
+  data-jil-preview="true"
 />
 {:/nomarkdown}
 ```
@@ -160,6 +163,7 @@ Qualified images are detected by `class="jil-map-image"` together with region da
 | `data-jil-viewer` | Enable/disable the Dynamic Map Viewer button |
 | `data-jil-inline` | Enable/disable direct click regions on the inline image |
 | `data-jil-labels` | Show region labels on the inline image |
+| `data-jil-preview` | Open a preview window on region click, or navigate the current page |
 
 ## Coordinate system
 
