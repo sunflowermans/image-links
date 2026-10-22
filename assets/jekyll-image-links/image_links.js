@@ -3,6 +3,12 @@
 
   const ROOT_SELECTOR = '[data-jil-root="true"]';
   const config = window.__JIL_CONFIG__ || {};
+  // Hosts that already have listeners on this element instance.
+  // data-jil-ready is not enough: a hover-popup preview clones the live map,
+  // so the attribute is copied, but click listeners are not. A WeakSet tracks
+  // the actual element. Clones are absent from it and get set up again, and
+  // entries disappear when the preview window is discarded.
+  const readyHosts = new WeakSet();
 
   function getHoverPopup() {
     const api = window.JekyllHoverPopup;
@@ -83,7 +89,23 @@
       );
     });
 
-    document.querySelectorAll("[data-jil-map]").forEach((host) => {
+    // Maps already in the page. Maps that appear later, such as inside a
+    // preview window, are handled by watchInsertedMaps.
+    initWithin(document);
+  }
+
+  // Set up every map host inside root. root may be the document (first load)
+  // or a node just inserted into a preview window.
+  function initWithin(root) {
+    if (!root || !root.querySelectorAll) return;
+
+    const hosts = [];
+    // The inserted node can be the host itself. querySelectorAll only looks
+    // at descendants, so include root when it is a map host.
+    if (root.nodeType === 1 && root.matches("[data-jil-map]")) hosts.push(root);
+    root.querySelectorAll("[data-jil-map]").forEach((host) => hosts.push(host));
+
+    hosts.forEach((host) => {
       try {
         initMapHost(host);
       } catch (error) {
@@ -92,9 +114,45 @@
     });
   }
 
+  // Page load only sees maps in the original document. Preview windows fetch
+  // or clone section HTML later, so watch for those nodes and set them up then.
+  function watchInsertedMaps() {
+    if (!document.body || typeof MutationObserver === "undefined") return;
+
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          // Text nodes cannot contain a map host.
+          if (node.nodeType !== 1) return;
+          initWithin(node);
+        });
+      });
+    });
+
+    // subtree covers maps nested inside the preview's section wrapper,
+    // not only nodes appended directly to body.
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // Drop UI that was copied from an already-initialized map. Labels and the
+  // viewer button are created in JS, so a clone includes the elements but not
+  // their listeners. Removing them lets init add a fresh, working copy.
+  // Server-rendered markup has neither, so this is a no-op on first setup.
+  function stripGeneratedUi(host) {
+    host.querySelectorAll(".jil-label-layer").forEach((node) => node.remove());
+    const figure = host.closest(".jil-figure");
+    if (!figure) return;
+    // The toolbar is a sibling of the host, inserted after the caption.
+    figure.querySelectorAll(":scope > .jil-toolbar").forEach((node) => node.remove());
+  }
+
   function initMapHost(host) {
-    if (host.dataset.jilReady === "true") return;
+    // Skip hosts already bound in this document. Clones are different elements
+    // and fall through even when they carry data-jil-ready from the original.
+    if (readyHosts.has(host)) return;
+    readyHosts.add(host);
     host.dataset.jilReady = "true";
+    stripGeneratedUi(host);
 
     let mapData;
     try {
@@ -120,24 +178,57 @@
     if (viewer) addViewerButton(host, mapData);
   }
 
+  // Keep overlay geometry in sync with the image, including inside a preview
+  // that is opened, resized, and then closed.
+  function bindLiveUpdates(host, img, update) {
+    const onLoad = () => update();
+    img.addEventListener("load", onLoad);
+
+    // Window listeners and a ResizeObserver would keep a closed preview's
+    // nodes alive. Drop them once the host has left the document.
+    const detach = () => {
+      window.removeEventListener("resize", onResize);
+      if (observer) observer.disconnect();
+    };
+
+    const onResize = () => {
+      if (!host.isConnected) {
+        detach();
+        return;
+      }
+      update();
+    };
+
+    let observer = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        // Closing a preview disconnects the host and fires this observer.
+        if (!host.isConnected) {
+          detach();
+          return;
+        }
+        update();
+      });
+      // Watch both: the host size follows the preview window, and the image
+      // size follows its own load and CSS.
+      observer.observe(host);
+      observer.observe(img);
+    }
+
+    window.addEventListener("resize", onResize);
+    // A cached image may already be complete, so the load event never fires.
+    if (img.complete) update();
+  }
+
   function bindOverlayGeometry(overlay, host, mapData, img) {
-    const update = () => {
+    bindLiveUpdates(host, img, () => {
       const geom = getMapGeometry(img, mapData);
       if (!geom || !geom.width || !geom.height) return;
       overlay.style.left = `${geom.offsetX}px`;
       overlay.style.top = `${geom.offsetY}px`;
       overlay.style.width = `${geom.width}px`;
       overlay.style.height = `${geom.height}px`;
-    };
-
-    if (img.complete) update();
-    img.addEventListener("load", update);
-    window.addEventListener("resize", update);
-    if (typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver(update);
-      observer.observe(host);
-      observer.observe(img);
-    }
+    });
   }
 
   function renderLabels(host, mapData, img) {
@@ -146,7 +237,7 @@
     host.appendChild(overlay);
     bindOverlayGeometry(overlay, host, mapData, img);
 
-    const update = () => {
+    bindLiveUpdates(host, img, () => {
       overlay.innerHTML = "";
       const geom = getMapGeometry(img, mapData);
       if (!geom || !geom.width || !geom.height) return;
@@ -169,16 +260,7 @@
         link.title = region.title || label;
         overlay.appendChild(link);
       });
-    };
-
-    if (img.complete) update();
-    img.addEventListener("load", update);
-    window.addEventListener("resize", update);
-    if (typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver(update);
-      observer.observe(host);
-      observer.observe(img);
-    }
+    });
   }
 
   function bindInlineClicks(host, mapData, img) {
@@ -593,7 +675,13 @@
       return;
     }
 
-    const run = () => init();
+    const run = () => {
+      // Observe before the first pass so a preview inserted during init is
+      // not missed. Init itself does not add map hosts, so this does not
+      // set the same map up twice.
+      watchInsertedMaps();
+      init();
+    };
 
     if (document.querySelector('[data-hover-popup-root="true"]') && !getHoverPopup()) {
       window.setTimeout(run, 0);
